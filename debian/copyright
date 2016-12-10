@@ -2,11 +2,11 @@ Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: libqbit-querydata-perl
 
 Files: *
-Copyright: 2015 Igor Sverdlov <igor-sverdlov@mail.ru>
+Copyright: 2016 Igor Sverdlov <igor-sverdlov@mail.ru>
 License: GPL-2.0+
 
 Files: debian/*
-Copyright: 2015 Igor Sverdlov <igor-sverdlov@mail.ru>
+Copyright: 2016 Igor Sverdlov <igor-sverdlov@mail.ru>
 License: GPL-2.0+
 
 License: GPL-2.0+
