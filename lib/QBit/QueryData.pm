@@ -8,19 +8,17 @@ __PACKAGE__->mk_accessors(qw(data definition));
 
 my $FILTER_OPERATIONS = {
     number => {
-        '='        => '==',
-        '!='       => '!=',
-        '<>'       => '!=',
-        '>'        => '>',
-        '>='       => '>=',
-        '<'        => '<',
-        '<='       => '<=',
-        'IN'       => '==',
-        'NOT IN'   => '==',
-        'IS'       => '==',
-        'IS NOT'   => '==',
-        'LIKE'     => '=~',
-        'NOT LIKE' => '=~',
+        '='      => '==',
+        '!='     => '!=',
+        '<>'     => '!=',
+        '>'      => '>',
+        '>='     => '>=',
+        '<'      => '<',
+        '<='     => '<=',
+        'IN'     => '==',
+        'NOT IN' => '==',
+        'IS'     => '==',
+        'IS NOT' => '==',
     },
     string => {
         '='        => 'eq',
@@ -60,6 +58,8 @@ sub fields {
     my ($self, $fields) = @_;
 
     if (defined($fields)) {
+        $fields = [keys(%$fields)] if ref($fields) eq 'HASH';
+
         if (@$fields == 0) {
             #default
             delete($self->{'__FIELDS__'});
@@ -139,9 +139,14 @@ sub order_by {
 sub limit {
     my ($self, $offset, $limit) = @_;
 
-    $self->{'__OFFSET__'} = $offset;
+    if (defined($limit)) {
+        $self->{'__OFFSET__'} = $offset // 0;
 
-    $self->{'__LIMIT__'} = $limit;
+        $self->{'__LIMIT__'} = $limit;
+    } else {
+        delete($self->{'__OFFSET__'});
+        delete($self->{'__LIMIT__'});
+    }
 
     return $self;
 }
@@ -262,10 +267,11 @@ sub _filter {
     } elsif (ref($filter) eq 'ARRAY' && @$filter == 3) {
         my ($field, $op, $value) = @$filter;
 
+        $value = $$value;
+
         my $not = ($op =~ /^NOT\s|\sNOT$/i);
 
         my $type_operation = $self->_get_filter_operation($field, $op);
-        $value = $self->_get_value($field, $value, $op);
 
         if (ref($value) eq 'ARRAY') {
             push(@part,
@@ -275,6 +281,8 @@ sub _filter {
                   . join(', ', map {$self->_get_value($field, $_)} @$value)
                   . "))");
         } else {
+            $value = $self->_get_value($field, $value, $op);
+
             push(@part, ($not ? '!' : '') . "(\$_[0]->{$field} $type_operation $value)");
         }
     }
@@ -340,3 +348,215 @@ sub _get_value {
 }
 
 TRUE;
+
+__END__
+
+=encoding utf8
+
+=head1 Name
+
+QBit::QueryData - Query constructor for the data.
+
+=head1 GitHub
+
+https://github.com/QBitFramework/QBit-QueryData
+
+=head1 Install
+
+=over
+
+=item *
+
+cpanm QBit::QueryData
+
+=item *
+
+apt-get install libqbit-querydata-perl (http://perlhub.ru/)
+
+=back
+
+=head1 Methods
+
+=over
+
+=item *
+
+B<new> - created object. Params:
+
+=over
+
+=item *
+
+B<data> - data.
+
+=item *
+
+B<fields> - default fields (optional, defualt all fields)
+
+=item *
+
+B<filter> - default filter (optional, default all data)
+
+=item *
+
+B<definition> - fields definition (optional, default 'string')
+
+=back
+
+B<Example:>
+
+    my $q = QBit::QueryData->new(
+        data => [
+            {
+                id      => 1,
+                caption => 'c1'
+            },
+            {
+                id      => 2,
+                caption => 'c2'
+            },
+        ],
+        fields => [qw(id caption)],
+        filter => ['OR', [{id => 1}, ['caption' => '=' => \'c2']]],
+        definition => {
+            id      => {type => 'number'},
+            caption => {type => 'string'}
+        },
+    );
+
+=item *
+
+B<fields> - set fields for request
+
+B<Example:>
+
+    $q->fields([qw(caption)]); # or $q->fields({caption => ''});
+    
+    $q->fields([]); # use default fields
+    
+    $q->fields(); # all fields
+
+=item *
+
+B<get_fields> - get fields
+
+B<Example:>
+
+    my $fields = $q->get_fields(); # ['caption', 'id']
+
+=item *
+
+B<filter> - set filter for request
+
+Types:
+
+=over
+
+=item *
+
+number: =, <>, !=, >. >=, <, <=, IN, NOT IN, IS, IS NOT
+
+=item *
+
+string: =, <>, !=, >. >=, <, <=, IN, NOT IN, IS, IS NOT, LIKE, NOT LIKE
+
+=back
+
+B<Example:>
+
+    $q->filter({id => 1, caption => 'c1'}); # or ['AND', [['id' => '=' => \1], ['caption' => '=' => \'c1']]]
+    
+    $q->filter(['caption' => 'LIKE' => \'c']);
+    
+    $q->filter(); # all data
+
+=item *
+
+B<definition> - set fields definition
+
+B<Example:>
+
+    $q->definition({
+        id      => {type => 'number'},
+        caption => {type => 'string'}
+    });
+
+=item *
+
+B<order_by> - set order sorting
+
+B<Example:>
+
+    # Ascending
+    $q->order_by(qw(id caption)); # or (['id', 0], ['caption', 0])
+    
+    # Descending
+    $q->order_by(['id', 1]);
+    
+=item *
+
+B<limit> - set offset and limit
+
+B<Example:>
+
+    $q->limit($offset, $limit);
+    
+    $q->limit(); # all data
+
+=item *
+
+B<found_rows> - data count
+
+B<Example:>
+
+    my $rows = $q->found_rows(); # 2
+
+=item *
+
+B<distinct> - set/reset only unique elements
+
+B<Example:>
+
+    #set
+    $q->distinct(1); # or $q->distinct();
+    
+    #reset
+    $q->distinct(0);
+
+=item *
+
+B<insensitive> - set/reset insensitive mode for LIKE 
+
+B<Example:>
+
+    #set
+    $q->insensitive(1); # or $q->insensitive();
+    
+    #reset
+    $q->insensitive(0);
+
+=item *
+
+B<get_all> - get data by settings
+
+B<Example:>
+
+    my $data = $q->get_all();
+    
+    $data = $q->fields([qw(id)])->filter(['caption' => 'LIKE' => \'c'])->order_by(['id', 1])->get_all();
+
+=item *
+
+B<all_langs> - support interface DB::Query
+
+=item *
+
+B<calc_rows> - support interface DB::Query
+
+=item *
+
+B<for_update> - support interface DB::Query
+
+=back
+
+=cut

@@ -71,7 +71,7 @@ $q->fields();
 
 cmp_deeply($q->get_fields, ['caption', 'id'], 'all fields');
 
-$q->filter(['OR', [['id' => '=' => 2], ['caption' => 'NOT LIKE' => 'caption']]]);
+$q->filter(['OR', [['id' => '=' => \2], ['caption' => 'NOT LIKE' => \'caption']]]);
 
 cmp_deeply($q->get_all(),
     [{'id' => 13, 'caption' => 'Caption 13'}, {'id' => 2, 'caption' => 'caption 2'}, {'id' => 5, 'caption' => undef}],
@@ -133,7 +133,7 @@ cmp_deeply(
     'distinct'
 );
 
-$q->filter(['id' => 'IN' => [5, 8, undef]]);
+$q->filter(['id' => 'IN' => \[5, 8, undef]]);
 
 cmp_deeply(
     $q->get_all(),
