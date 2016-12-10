@@ -1,0 +1,29 @@
+==================================================
+Changes from 2015-12-11 00:00:00 +0000 to present.
+==================================================
+
+------------------------------------------
+version 0.001 at 2016-12-10 16:49:39 +0000
+------------------------------------------
+
+  Change: 57c96477ab200c4e755b3289e4e51cbe0df19c78
+  Author: Igor Sverdlov <igor-sverdlov@mail.ru>
+  Date : 2016-12-10 19:47:24 +0000
+
+    fix copyright year 
+
+  Change: b7bd88dfc5db4dfb3b8f7b6853ccb2b0fb55669c
+  Author: Igor Sverdlov <igor-sverdlov@mail.ru>
+  Date : 2016-12-10 19:45:40 +0000
+
+    added documentation 
+
+  Change: 09e90e71b7b0af34bad8a3235b42ef05f513e11b
+  Author: Igor Sverdlov <igor-sverdlov@mail.ru>
+  Date : 2016-12-10 18:32:51 +0000
+
+    Initial commit 
+
+================
+End of releases.
+================

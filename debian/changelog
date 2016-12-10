@@ -1,5 +1,15 @@
 libqbit-querydata-perl (0.001) raring; urgency=low
 
+  * fix copyright year
+
+  * added documentation
+
+  * Initial commit
+
+ -- Igor Sverdlov <igor-sverdlov@mail.ru>  Sat, 10 Dec 2016 19:49:39 +0300
+
+libqbit-querydata-perl (0.001) raring; urgency=low
+
   * Initial commit
 
  -- igor Sverdlov <igor-sverdlov@mail.ru>  Sat Sep 5 20:13:35 2015 +0300
