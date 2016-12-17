@@ -91,6 +91,18 @@ cmp_deeply($q->get_all(), $data, 'empty filter');
 
     $q->definition({id => {type => 'number'}, caption => {type => 'string'}});
 
+    my $err = FALSE;
+    try {
+        $q->filter({id => 'die("aaa")'});
+    }
+    catch {
+        $err = TRUE;
+        is(shift->message, gettext('%s - not number', 'die("aaa")'), 'corrected message');
+    }
+    finally {
+        ok($err, 'catch error');
+    };
+
     $q->order_by(['caption', 1], ['id', 0]);
 
     cmp_deeply(
