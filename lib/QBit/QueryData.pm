@@ -487,13 +487,15 @@ Types:
 
 =item *
 
-number: =, <>, !=, >. >=, <, <=, IN, NOT IN, IS, IS NOT
+number: "=" "<>" "!=" ">" ">=" "<" "<=" "IN" "NOT IN" "IS" "IS NOT"
 
 =item *
 
-string: =, <>, !=, >. >=, <, <=, IN, NOT IN, IS, IS NOT, LIKE, NOT LIKE
+string: "=" "<>" "!=" ">" ">=" "<" "<=" "IN" "NOT IN" "IS" "IS NOT" "LIKE" "NOT LIKE"
 
 =back
+
+For list: "=" "<>" "!=" "IN" "NOT IN"
 
 B<Example:>
 
