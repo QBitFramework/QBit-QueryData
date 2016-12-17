@@ -342,6 +342,8 @@ sub _get_value {
     if ($type eq 'string') {
         $value =~ s/'/\\'/g;
         $value = "'$value'";
+    } else {
+        throw gettext('%s - not number', $value) unless looks_like_number($value);
     }
 
     return $value;
