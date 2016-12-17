@@ -1,3 +1,11 @@
+libqbit-querydata-perl (0.002) raring; urgency=low
+
+  * check fields
+
+  * fix security
+
+ -- Igor Sverdlov <igor-sverdlov@mail.ru>  Sat, 17 Dec 2016 18:15:14 +0300
+
 libqbit-querydata-perl (0.001) raring; urgency=low
 
   * fix copyright year
