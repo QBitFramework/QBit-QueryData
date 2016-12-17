@@ -4,13 +4,13 @@ use qbit;
 
 use base qw(QBit::Class);
 
-__PACKAGE__->mk_accessors(qw(data definition));
+__PACKAGE__->mk_accessors(qw(definition));
 
 my $FILTER_OPERATIONS = {
     number => {
         '='      => '==',
-        '!='     => '!=',
-        '<>'     => '!=',
+        '!='     => '==',
+        '<>'     => '==',
         '>'      => '>',
         '>='     => '>=',
         '<'      => '<',
@@ -22,8 +22,8 @@ my $FILTER_OPERATIONS = {
     },
     string => {
         '='        => 'eq',
-        '!='       => 'ne',
-        '<>'       => 'ne',
+        '!='       => 'eq',
+        '<>'       => 'eq',
         '>'        => 'gt',
         '>='       => 'ge',
         '<'        => 'lt',
@@ -45,13 +45,31 @@ my $ORDER_OPERATIONS = {
 sub init {
     my ($self) = @_;
 
-    $self->data([]) unless defined($self->data);
-
     $self->definition({}) unless defined($self->definition);
+
+    $self->data($self->{'data'} // []);
 
     $self->fields($self->get_fields());
 
     $self->filter($self->{'filter'});
+}
+
+sub data {
+    my ($self, $data) = @_;
+
+    if (defined($data)) {
+        delete($self->{'__EXISTS_FIELDS__'});
+        delete($self->{'__ALL_FIELDS__'});
+
+        foreach my $field (sort keys(%{$data->[0] // {}})) {
+            $self->{'__EXISTS_FIELDS__'}{$field} = TRUE;
+            push(@{$self->{'__ALL_FIELDS__'}}, $field);
+        }
+
+        $self->{'data'} = $data;
+    }
+
+    return $self->{'data'};
 }
 
 sub fields {
@@ -65,6 +83,9 @@ sub fields {
             delete($self->{'__FIELDS__'});
         } else {
             #set fields
+            my @not_exists = grep {!$self->{'__EXISTS_FIELDS__'}{$_}} @$fields;
+            throw gettext('Unknown fields: %s', join(', ', @not_exists)) if @not_exists;
+
             $self->{'__FIELDS__'} = $fields;
         }
     } else {
@@ -79,7 +100,7 @@ sub fields {
 sub get_fields {
     my ($self) = @_;
 
-    return $self->{'__FIELDS__'} // $self->{'fields'} // [sort keys(%{$self->data->[0] // {}})];
+    return $self->{'__FIELDS__'} // $self->{'fields'} // $self->{'__ALL_FIELDS__'};
 }
 
 sub filter {
@@ -177,11 +198,11 @@ sub get_all {
     if (defined($self->{'__LIMIT__'})) {
         $self->{'__OFFSET__'} //= 0;
 
-        return [] if $self->{'__OFFSET__'} > @data;
+        return [] if $self->{'__OFFSET__'} >= @data;
 
-        my $high = $self->{'__LIMIT__'} + $self->{'__OFFSET__'};
+        my $high = $self->{'__OFFSET__'} + $self->{'__LIMIT__'} - 1;
 
-        $high = $high > @data ? $#data : $high - 1;
+        $high = $#data if $high > $#data;
 
         @data = @data[$self->{'__OFFSET__'} .. $high];
     }
@@ -243,6 +264,8 @@ sub _filter {
     my @part = ();
     if (ref($filter) eq 'HASH') {
         foreach my $field (keys(%$filter)) {
+            throw gettext('Unknown field "%s"', $field) unless $self->{'__EXISTS_FIELDS__'}{$field};
+
             my $type_operation = $self->_get_filter_operation($field, '=');
 
             if (ref($filter->{$field}) eq 'ARRAY') {
@@ -267,23 +290,29 @@ sub _filter {
     } elsif (ref($filter) eq 'ARRAY' && @$filter == 3) {
         my ($field, $op, $value) = @$filter;
 
-        $value = $$value;
+        throw gettext('Unknown field "%s"', $field) unless $self->{'__EXISTS_FIELDS__'}{$field};
 
-        my $not = ($op =~ /^NOT\s|\sNOT$/i);
+        $op    = uc($op);
+        $value = $$value;
 
         my $type_operation = $self->_get_filter_operation($field, $op);
 
         if (ref($value) eq 'ARRAY') {
+            throw gettext('Operation "%s" is not applied to the array', $op)
+              if grep {$op eq $_} ('>', '>=', '<', '<=', 'LIKE', 'NOT LIKE', 'IS', 'IS NOT');
+
             push(@part,
                     "("
-                  . ($not ? '!' : '')
+                  . ($op eq '<>' || $op eq '!=' || $op eq 'NOT IN' ? '!' : '')
                   . "grep {\$_[0]->{$field} $type_operation \$_} ("
                   . join(', ', map {$self->_get_value($field, $_)} @$value)
                   . "))");
         } else {
             $value = $self->_get_value($field, $value, $op);
 
-            push(@part, ($not ? '!' : '') . "(\$_[0]->{$field} $type_operation $value)");
+            push(@part,
+                ($op eq '<>' || $op eq '!=' || $op =~ /^NOT\s|\sNOT$/i ? '!' : '')
+                  . "(\$_[0]->{$field} $type_operation $value)");
         }
     }
 
@@ -297,6 +326,8 @@ sub _get_order {
 
     my @part = ();
     foreach my $order (@order_by) {
+        throw gettext('Unknown field "%s"', $order->[0]) unless $self->{'__EXISTS_FIELDS__'}{$order->[0]};
+
         my $type_operation = $self->_get_order_operation($order->[0]);
 
         unless ($order->[1]) {
