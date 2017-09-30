@@ -211,7 +211,7 @@ sub get_all {
 
     my @result = ();
 
-    my @fields = @{$self->get_fields()};
+    my @fields = @{$self->get_fields() // []};
     if ($self->{'__DISTINCT__'}) {
         my %uniq = ();
 
