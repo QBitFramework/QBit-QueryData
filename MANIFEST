@@ -14,5 +14,6 @@ debian/copyright
 debian/rules
 dist.ini
 lib/QBit/QueryData.pm
+t/qbit-querydata-empty-array.t
 t/qbit-querydata-hash.t
 t/qbit-querydata.t
