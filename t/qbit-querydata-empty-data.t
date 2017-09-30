@@ -9,9 +9,17 @@ use lib::abs qw(../lib);
 
 use QBit::QueryData;
 
+my $q = QBit::QueryData->new();
+
+cmp_deeply($q->get_all(), [], 'get_all');
+
+$q = QBit::QueryData->new(data => undef);
+
+cmp_deeply($q->get_all(), [], 'get_all');
+
 my $data = [];
 
-my $q = QBit::QueryData->new(data => []);
+$q = QBit::QueryData->new(data => $data);
 
 $q->fields([qw(id field)]);
 
