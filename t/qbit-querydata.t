@@ -145,6 +145,38 @@ cmp_deeply(
     'distinct'
 );
 
+{
+    my $err = FALSE;
+
+    try {
+        $q->filter(['id' => 'IS' => \3]);
+    }
+    catch {
+        $err = TRUE;
+        is(shift->message, gettext('Operation "%s" is only applied to the undef', 'IS'), 'corrected message');
+    }
+    finally {
+        ok($err, 'catch error');
+    };
+}
+
+$q->filter({NOT => [['id' => 'IN' => \[(5 .. 13), undef]]]});
+
+cmp_deeply(
+    $q->get_all(),
+    [
+        {
+            id      => 1,
+            caption => 'caption 1',
+        },
+        {
+            id      => 2,
+            caption => 'caption 2',
+        },
+    ],
+    'filter with function "NOT"'
+);
+
 $q->filter(['id' => 'IN' => \[5, 8, undef]]);
 
 cmp_deeply(
