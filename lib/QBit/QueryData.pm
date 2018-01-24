@@ -265,21 +265,29 @@ sub _filter {
 
     my @part = ();
     if (ref($filter) eq 'HASH') {
-        foreach my $field (keys(%$filter)) {
-            throw gettext('Unknown field "%s"', $field)
-              if exists($self->{'__EXISTS_FIELDS__'}) && !$self->{'__EXISTS_FIELDS__'}{$field};
+        if ([%$filter]->[0] eq 'NOT' && ref([%$filter]->[1]) eq 'ARRAY') {
+            my $sub_body .= 'not (';
+            $self->_filter(\$sub_body, [%$filter]->[1][0]);
+            $sub_body .= ')';
 
-            my $type_operation = $self->_get_filter_operation($field, '=');
+            push(@part, $sub_body);
+        } else {
+            foreach my $field (keys(%$filter)) {
+                throw gettext('Unknown field "%s"', $field)
+                  if exists($self->{'__EXISTS_FIELDS__'}) && !$self->{'__EXISTS_FIELDS__'}{$field};
 
-            if (ref($filter->{$field}) eq 'ARRAY') {
-                push(@part,
-                        "(grep {\$_[0]->{$field} $type_operation \$_} ("
-                      . join(', ', map {$self->_get_value($field, $_)} @{$filter->{$field}})
-                      . "))");
-            } else {
-                my $value = $self->_get_value($field, $filter->{$field});
+                my $type_operation = $self->_get_filter_operation($field, '=');
 
-                push(@part, "(\$_[0]->{$field} $type_operation $value)");
+                if (ref($filter->{$field}) eq 'ARRAY') {
+                    push(@part,
+                            "(grep {\$_[0]->{$field} $type_operation \$_} ("
+                          . join(', ', map {$self->_get_value($field, $_)} @{$filter->{$field}})
+                          . "))");
+                } else {
+                    my $value = $self->_get_value($field, $filter->{$field});
+
+                    push(@part, "(\$_[0]->{$field} $type_operation $value)");
+                }
             }
         }
     } elsif (ref($filter) eq 'ARRAY' && @$filter == 2) {
@@ -312,6 +320,9 @@ sub _filter {
                   . join(', ', map {$self->_get_value($field, $_)} @$value)
                   . "))");
         } else {
+            throw gettext('Operation "%s" is only applied to the undef', $op)
+              if (grep {$op eq $_} ('IS', 'IS NOT')) && defined($value);
+
             $value = $self->_get_value($field, $value, $op);
 
             push(@part,
