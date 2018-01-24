@@ -45,6 +45,8 @@ my $ORDER_OPERATIONS = {
 sub init {
     my ($self) = @_;
 
+    $self->{'fields'} = {map {$_ => ''} @{$self->{'fields'}}} if ref($self->{'fields'}) eq 'ARRAY';
+
     $self->definition({}) unless defined($self->definition);
 
     $self->data($self->{'data'} // []);
@@ -58,12 +60,10 @@ sub data {
     my ($self, $data) = @_;
 
     if (defined($data)) {
-        delete($self->{'__EXISTS_FIELDS__'});
         delete($self->{'__ALL_FIELDS__'});
 
         foreach my $field (sort keys(%{$data->[0] // {}})) {
-            $self->{'__EXISTS_FIELDS__'}{$field} = TRUE;
-            push(@{$self->{'__ALL_FIELDS__'}}, $field);
+            $self->{'__ALL_FIELDS__'}{$field} = '';
         }
 
         $self->{'data'} = $data;
@@ -76,15 +76,19 @@ sub fields {
     my ($self, $fields) = @_;
 
     if (defined($fields)) {
-        $fields = [keys(%$fields)] if ref($fields) eq 'HASH';
+        $fields = {map {$_ => ''} @$fields} if ref($fields) eq 'ARRAY';
 
-        if (@$fields == 0) {
+        unless (%$fields) {
             #default
             delete($self->{'__FIELDS__'});
         } else {
             #set fields
-            if (exists($self->{'__EXISTS_FIELDS__'})) {
-                my @not_exists = grep {!$self->{'__EXISTS_FIELDS__'}{$_}} @$fields;
+            if (exists($self->{'__ALL_FIELDS__'})) {
+                my @not_exists = grep {
+                    (!exists($self->{'__ALL_FIELDS__'}{$_}) && $fields->{$_} eq '')
+                      || (!exists($self->{'__ALL_FIELDS__'}{$fields->{$_}})
+                        && $fields->{$_} ne '')
+                } keys(%$fields);
                 throw gettext('Unknown fields: %s', join(', ', @not_exists)) if @not_exists;
             }
 
@@ -211,7 +215,8 @@ sub get_all {
 
     my @result = ();
 
-    my @fields = @{$self->get_fields() // []};
+    my $fields = $self->get_fields() // {};
+    my @fields = keys(%$fields);
     if ($self->{'__DISTINCT__'}) {
         my %uniq = ();
 
@@ -222,7 +227,7 @@ sub get_all {
             foreach (@fields) {
                 $str .= $row->{$_} // 'UNDEF';
 
-                $new_row->{$_} = $row->{$_};
+                $new_row->{$_} = $row->{$fields->{$_} || $_};
             }
 
             unless ($uniq{$str}) {
@@ -233,7 +238,7 @@ sub get_all {
         }
     } else {
         foreach my $row (@data) {
-            push(@result, {map {$_ => $row->{$_}} @fields});
+            push(@result, {map {$_ => $row->{$fields->{$_} || $_}} @fields});
         }
     }
 
@@ -274,7 +279,7 @@ sub _filter {
         } else {
             foreach my $field (keys(%$filter)) {
                 throw gettext('Unknown field "%s"', $field)
-                  if exists($self->{'__EXISTS_FIELDS__'}) && !$self->{'__EXISTS_FIELDS__'}{$field};
+                  if exists($self->{'__ALL_FIELDS__'}) && !exists($self->{'__ALL_FIELDS__'}{$field});
 
                 my $type_operation = $self->_get_filter_operation($field, '=');
 
@@ -302,7 +307,7 @@ sub _filter {
         my ($field, $op, $value) = @$filter;
 
         throw gettext('Unknown field "%s"', $field)
-          if exists($self->{'__EXISTS_FIELDS__'}) && !$self->{'__EXISTS_FIELDS__'}{$field};
+          if exists($self->{'__ALL_FIELDS__'}) && !exists($self->{'__ALL_FIELDS__'}{$field});
 
         $op    = uc($op);
         $value = $$value;
@@ -344,7 +349,7 @@ sub _get_order {
         my @path = split(/\./, $order->[0]);
 
         throw gettext('Unknown field "%s"', $path[0])
-          if exists($self->{'__EXISTS_FIELDS__'}) && !$self->{'__EXISTS_FIELDS__'}{$path[0]};
+          if exists($self->{'__ALL_FIELDS__'}) && !exists($self->{'__ALL_FIELDS__'}{$path[0]});
 
         my $type_operation = $self->_get_order_operation($order->[0]);
 
@@ -495,11 +500,19 @@ B<fields> - set fields for request
 
 B<Example:>
 
-    $q->fields([qw(caption)]); # or $q->fields({caption => ''});
-    
-    $q->fields([]); # use default fields
-    
-    $q->fields(); # all fields
+    # set fields
+    $q->fields([qw(caption)]);
+    $q->fields({
+        caption => '',
+        key => 'id', # create alias 'key' for field 'id'
+    });
+
+    # use default fields
+    $q->fields([]);
+    $q->fields({});
+
+    # all fields
+    $q->fields();
 
 =item *
 
@@ -507,7 +520,7 @@ B<get_fields> - get fields
 
 B<Example:>
 
-    my $fields = $q->get_fields(); # ['caption', 'id']
+    my $fields = $q->get_fields(); # {'caption' => '', 'key' => 'id'}
 
 =item *
 
