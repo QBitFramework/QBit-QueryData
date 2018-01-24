@@ -51,7 +51,7 @@ my $q = QBit::QueryData->new(
     definition => {caption => {type => 'string'}}
 );
 
-cmp_deeply($q->get_fields, ['caption'], 'get_fields');
+cmp_deeply($q->get_fields, {'caption' => ''}, 'get_fields');
 
 cmp_deeply($q->definition(), {caption => {type => 'string'}}, 'definition');
 
@@ -61,15 +61,15 @@ cmp_deeply($q->get_all(), [{'caption' => 'caption 1'}], 'filter is not changed')
 
 $q->fields([qw(id caption)]);
 
-cmp_deeply($q->get_fields, ['id', 'caption'], 'changed fields');
+cmp_deeply($q->get_fields, {'id' => '', 'caption' => ''}, 'changed fields');
 
 $q->fields([]);
 
-cmp_deeply($q->get_fields, ['caption'], 'default fields');
+cmp_deeply($q->get_fields, {'caption' => ''}, 'default fields');
 
 $q->fields();
 
-cmp_deeply($q->get_fields, ['caption', 'id'], 'all fields');
+cmp_deeply($q->get_fields, {'caption' => '', 'id' => ''}, 'all fields');
 
 $q->filter(['OR', [['id' => '=' => \2], ['caption' => 'NOT LIKE' => \'caption']]]);
 
