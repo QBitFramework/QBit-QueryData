@@ -1,3 +1,11 @@
+libqbit-querydata-perl (0.006) raring; urgency=low
+
+  * fix code
+
+  * support function NOT and added exception
+
+ -- Igor Sverdlov <igor-sverdlov@mail.ru>  Thu, 25 Jan 2018 00:46:19 +0300
+
 libqbit-querydata-perl (0.005) raring; urgency=low
 
   * added tests
