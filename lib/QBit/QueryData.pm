@@ -265,9 +265,9 @@ sub _filter {
 
     my @part = ();
     if (ref($filter) eq 'HASH') {
-        if ([%$filter]->[0] eq 'NOT' && ref([%$filter]->[1]) eq 'ARRAY') {
+        if ([%$filter]->[0] eq 'NOT' && ref($filter->{'NOT'}) eq 'ARRAY') {
             my $sub_body .= 'not (';
-            $self->_filter(\$sub_body, [%$filter]->[1][0]);
+            $self->_filter(\$sub_body, $filter->{'NOT'}[0]);
             $sub_body .= ')';
 
             push(@part, $sub_body);
