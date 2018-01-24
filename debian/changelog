@@ -1,3 +1,9 @@
+libqbit-querydata-perl (0.007) raring; urgency=low
+
+  * support simple alias
+
+ -- Igor Sverdlov <igor-sverdlov@mail.ru>  Thu, 25 Jan 2018 01:38:46 +0300
+
 libqbit-querydata-perl (0.006) raring; urgency=low
 
   * fix code
