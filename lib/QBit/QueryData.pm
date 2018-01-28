@@ -195,7 +195,47 @@ sub found_rows {
 sub get_all {
     my ($self, %opts) = @_;
 
-    my @data = defined($self->{'__FILTER__'}) ? grep {$self->{'__FILTER__'}->($_)} @{$self->data} : @{$self->data};
+    my $fields         = $self->get_fields() // {};
+    my @fields         = keys(%$fields);
+    my @db_fields      = ();
+    my @precess_fields = ();
+
+    foreach (@fields) {
+        if ($fields->{$_}) {
+            push(@precess_fields, $_);
+        } else {
+            push(@db_fields, $_);
+        }
+    }
+
+    my @group_by = @{$self->{'__GROUP_BY__'} // []};
+
+    if (!@group_by && $self->{'__DISTINCT__'}) {
+        @group_by = @fields;
+    }
+
+    my %uniq = ();
+    my @data = ();
+    foreach my $row (@{$self->{'data'}}) {
+        next if defined($self->{'__FILTER__'}) && !$self->{'__FILTER__'}->($row);
+
+        my $new_row = {map {$_ => $row->{$fields->{$_}}} @precess_fields};
+
+        if (@group_by) {
+            my $key = join($;, map {my $v = $fields->{$_} ? $new_row->{$_} : $row->{$_}; $v // 'UNDEF'} @group_by);
+
+            unless ($uniq{$key}) {
+                $new_row->{$_} = $row->{$_} foreach @db_fields;
+
+                push(@data, $new_row);
+
+                $uniq{$key} = TRUE;
+            }
+        } else {
+            $new_row->{$_} = $row->{$_} foreach @db_fields;
+            push(@data, $new_row);
+        }
+    }
 
     if (defined($self->{'__ORDER_BY__'})) {
         @data = sort {$self->{'__ORDER_BY__'}->($a, $b)} @data;
@@ -213,36 +253,41 @@ sub get_all {
         @data = @data[$self->{'__OFFSET__'} .. $high];
     }
 
-    my @result = ();
+    return \@data;
+}
 
-    my $fields = $self->get_fields() // {};
-    my @fields = keys(%$fields);
-    if ($self->{'__DISTINCT__'}) {
-        my %uniq = ();
+sub group_by {
+    my ($self, @group_by) = @_;
 
-        foreach my $row (@data) {
-            my $str = '';
+    unless (@group_by) {
+        delete($self->{'__GROUP_BY__'});
 
-            my $new_row = {};
-            foreach (@fields) {
-                $str .= $row->{$_} // 'UNDEF';
-
-                $new_row->{$_} = $row->{$fields->{$_} || $_};
-            }
-
-            unless ($uniq{$str}) {
-                push(@result, $new_row);
-
-                $uniq{$str} = TRUE;
-            }
-        }
-    } else {
-        foreach my $row (@data) {
-            push(@result, {map {$_ => $row->{$fields->{$_} || $_}} @fields});
-        }
+        return $self;
     }
 
-    return \@result;
+    my $fields = $self->get_fields() // {};
+    if (exists($self->{'__ALL_FIELDS__'})) {
+        my @unknown_fields = ();
+        foreach my $field (@group_by) {
+            if (!exists($self->{'__ALL_FIELDS__'}{$field}) && !exists($fields->{$field})) {
+                push(@unknown_fields, $field);
+            }
+        }
+
+        throw Exception::BadArguments gettext("You can't grouping by following fields: %s", join(', ', @unknown_fields))
+          if @unknown_fields;
+    }
+
+    my %group_by = map {$_ => TRUE} @group_by;
+    my @not_grouping_fields = grep {!$fields->{$_} && !$group_by{$_}} keys(%$fields);
+
+    throw Exception::BadArguments gettext("You've forgotten grouping function for query fields: %s",
+        join(', ', @not_grouping_fields))
+      if @not_grouping_fields;
+
+    $self->{'__GROUP_BY__'} = \@group_by;
+
+    return $self;
 }
 
 sub _get_filter {
