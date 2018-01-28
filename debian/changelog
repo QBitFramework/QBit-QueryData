@@ -1,3 +1,13 @@
+libqbit-querydata-perl (0.008) raring; urgency=low
+
+  * added tests
+
+  * use multifields into filters
+
+  * support group by
+
+ -- Igor Sverdlov <igor-sverdlov@mail.ru>  Sun, 28 Jan 2018 11:05:51 +0300
+
 libqbit-querydata-perl (0.007) raring; urgency=low
 
   * support simple alias
