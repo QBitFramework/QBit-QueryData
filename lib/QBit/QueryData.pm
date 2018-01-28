@@ -42,6 +42,120 @@ my $ORDER_OPERATIONS = {
     string => 'cmp',
 };
 
+my $FUNCTIONS = {
+    DOT => sub {
+        my ($qd, $path) = @_;
+
+        return {
+            process => sub {
+                my ($qd, $fields, $row) = @_;
+
+                return $qd->_get_field_value_by_path($fields, $row, undef, undef, @$path);
+            },
+        };
+    },
+    CONCAT => sub {
+        my ($qd, $fields, $field) = @_;
+
+        my $args = $fields->{$field}{'CONCAT'};
+
+        return {
+            process => sub {
+                my ($qd, $fields, $row) = @_;
+
+                return join(
+                    '',
+                    map {
+                        ref($_) eq 'SCALAR'
+                          ? $$_
+                          : $qd->_get_field_value_by_path($fields, $row, undef, undef, @{$qd->_get_path($_)})
+                          // ''
+                      } @$args
+                );
+            },
+        };
+    },
+    COUNT => sub {
+        my ($qd, $fields, $field) = @_;
+
+        my $args = $fields->{$field}{'COUNT'};
+
+        throw gettext('Function "COUNT" can not take more than one arguments') if @$args > 1;
+
+        #TODO: проверить что поля в $args существуют
+
+        my $aggr_field = ref($args->[0]) eq 'SCALAR' && ${$args->[0]} eq '*' ? ${$args->[0]} : $args->[0];
+
+        my $AGGREGATOR = {};
+        my $COUNT      = 0;
+
+        return {
+            init => sub {
+                $AGGREGATOR = {};
+                $COUNT      = 0;
+            },
+            process => sub {
+                my ($qd, $fields, $row) = @_;
+
+                if ($aggr_field eq '*') {
+                    $COUNT++;
+                } else {
+                    my $val =
+                      $qd->_get_field_value_by_path($fields, $row, undef, undef, @{$qd->_get_path($aggr_field)});
+
+                    $COUNT++ if defined($val);
+                }
+
+                return $COUNT // 0;
+            },
+            aggregation => sub {
+                my ($qd, $fields, $row, $key) = @_;
+
+                $AGGREGATOR->{$key} += $COUNT // 0;
+
+                $COUNT = 0;
+
+                return $AGGREGATOR->{$key} // 0;
+            },
+        };
+    },
+    SUM => sub {
+        my ($qd, $fields, $field) = @_;
+
+        my $args = $fields->{$field}{'SUM'};
+
+        throw gettext('Function "SUM" can not take more than one arguments') if @$args > 1;
+
+        #TODO: проверить что поля в $args существуют
+
+        my $AGGREGATOR = {};
+        my $SUM        = 0;
+
+        return {
+            init => sub {
+                $AGGREGATOR = {};
+                $SUM        = 0;
+            },
+            process => sub {
+                my ($qd, $fields, $row) = @_;
+
+                my $val = $qd->_get_field_value_by_path($fields, $row, undef, undef, @{$qd->_get_path($args->[0])});
+
+                return $SUM += $val // 0;
+            },
+            aggregation => sub {
+                my ($qd, $fields, $row, $key) = @_;
+
+                $AGGREGATOR->{$key} += $SUM // 0;
+
+                $SUM = 0;
+
+                return $AGGREGATOR->{$key} // 0;
+            },
+        };
+    },
+};
+
 sub init {
     my ($self) = @_;
 
@@ -84,11 +198,40 @@ sub fields {
         } else {
             #set fields
             if (exists($self->{'__ALL_FIELDS__'})) {
-                my @not_exists = grep {
-                    (!exists($self->{'__ALL_FIELDS__'}{$_}) && $fields->{$_} eq '')
-                      || (!exists($self->{'__ALL_FIELDS__'}{$fields->{$_}})
-                        && $fields->{$_} ne '')
-                } keys(%$fields);
+                my @not_exists = ();
+
+                foreach my $field (keys(%$fields)) {
+                    my $path = $self->_get_path($field);
+
+                    if (@$path > 1 && $fields->{$field} eq '') {
+                        unless (exists($self->{'__ALL_FIELDS__'}{$path->[0]{'key'}})) {
+                            push(@not_exists, $path->[0]{'key'});
+
+                            next;
+                        }
+
+                        $self->{'__PROCESS_FIELDS__'}{$field} = $FUNCTIONS->{'DOT'}->($self, $path);
+                    } elsif (@$path == 1
+                        && ref($fields->{$field}) eq 'HASH'
+                        && exists($FUNCTIONS->{[%{$fields->{$field}}]->[0]}))
+                    {
+                        my $func_name = [%{$fields->{$field}}]->[0];
+                        throw gettext('You must set arguments for function "%s": {%s => [...]}', $func_name, $func_name)
+                          if ref($fields->{$field}{$func_name}) ne 'ARRAY';
+
+                        #TODO: проверять поля на существование, но кажется нужно вынести куда то в одно место
+
+                        $self->{'__PROCESS_FIELDS__'}{$field} = $FUNCTIONS->{$func_name}->($self, $fields, $field);
+                    } elsif (
+                        (!exists($self->{'__ALL_FIELDS__'}{$path->[0]{'key'}}) && $fields->{$field} eq '')
+                        || (!exists($self->{'__ALL_FIELDS__'}{$fields->{$field}})
+                            && $fields->{$field} ne '')
+                      )
+                    {
+                        push(@not_exists, $path->[0]{'key'});
+                    }
+                }
+
                 throw gettext('Unknown fields: %s', join(', ', @not_exists)) if @not_exists;
             }
 
@@ -198,13 +341,24 @@ sub get_all {
     my $fields         = $self->get_fields() // {};
     my @fields         = keys(%$fields);
     my @db_fields      = ();
-    my @precess_fields = ();
+    my @process_fields = ();
+    my @aggregators    = ();
 
     foreach (@fields) {
-        if ($fields->{$_}) {
-            push(@precess_fields, $_);
+        if ($fields->{$_} || $self->{'__PROCESS_FIELDS__'}{$_}) {
+            push(@process_fields, $_);
         } else {
             push(@db_fields, $_);
+        }
+
+        if ($self->{'__PROCESS_FIELDS__'}{$_}) {
+            if ($self->{'__PROCESS_FIELDS__'}{$_}{'init'}) {
+                $self->{'__PROCESS_FIELDS__'}{$_}{'init'}->();
+            }
+
+            if ($self->{'__PROCESS_FIELDS__'}{$_}{'aggregation'}) {
+                push(@aggregators, $_);
+            }
         }
     }
 
@@ -219,20 +373,47 @@ sub get_all {
     foreach my $row (@{$self->{'data'}}) {
         next if defined($self->{'__FILTER__'}) && !$self->{'__FILTER__'}->($row);
 
-        my $new_row = {map {$_ => $row->{$fields->{$_}}} @precess_fields};
+        my $new_row = {};
+        foreach my $field (@process_fields) {
+            if ($self->{'__PROCESS_FIELDS__'}{$field}{'process'}) {
+                $new_row->{$field} = $self->{'__PROCESS_FIELDS__'}{$field}{'process'}->($self, $fields, $row);
+            } else {
+                $new_row->{$field} = $row->{$fields->{$field}};
+            }
+        }
 
         if (@group_by) {
-            my $key = join($;, map {$self->_get_field_value_by_path($fields, $row, $new_row, undef, @$_) // 'UNDEF'} @group_by);
+            my $key =
+              join($;, map {$self->_get_field_value_by_path($fields, $row, $new_row, undef, @$_) // 'UNDEF'} @group_by);
 
-            unless ($uniq{$key}) {
+            if (exists($uniq{$key})) {
+                # ключ совпадает, только агрегируем
+                $data[$uniq{$key}]->{$_} =
+                  $self->{'__PROCESS_FIELDS__'}{$_}{'aggregation'}->($self, $fields, $row, $key)
+                  foreach @aggregators;
+            } else {
+                # строка с новым ключом
                 $new_row->{$_} = $row->{$_} foreach @db_fields;
 
                 push(@data, $new_row);
 
-                $uniq{$key} = TRUE;
+                $uniq{$key} = $#data;
             }
+        } elsif (@aggregators) {
+            # нет группировок но есть агригирующие функции
+            unless (@data) {
+                # результат одна строка
+                $new_row->{$_} = $row->{$_} foreach @db_fields;
+
+                push(@data, $new_row);
+            }
+
+            $data[0]->{$_} = $self->{'__PROCESS_FIELDS__'}{$_}{'aggregation'}->($self, $fields, $row, $_)
+              foreach @aggregators;
         } else {
+            # всё ок, докидываем только из массива поля
             $new_row->{$_} = $row->{$_} foreach @db_fields;
+
             push(@data, $new_row);
         }
     }
@@ -360,7 +541,7 @@ sub _filter {
         my $path = $self->_get_path($field);
 
         throw gettext('Unknown field "%s"', $path->[0]{'key'})
-                  if exists($self->{'__ALL_FIELDS__'}) && !exists($self->{'__ALL_FIELDS__'}{$path->[0]{'key'}});
+          if exists($self->{'__ALL_FIELDS__'}) && !exists($self->{'__ALL_FIELDS__'}{$path->[0]{'key'}});
 
         $op    = uc($op);
         $value = $$value;
