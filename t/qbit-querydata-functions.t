@@ -70,4 +70,40 @@ cmp_deeply(
     'SUM(val) and SUM(id) and group by num'
 );
 
+$q->fields({max => {MAX => ['val']}});
+$q->group_by();
+
+cmp_deeply($q->get_all(), [{max => 6}], 'MAX(val)');
+
+$q->fields({max_val => {MAX => ['val']}, max_num => {MAX => ['num']}});
+
+cmp_deeply($q->get_all(), [{max_val => 6, max_num => 2}], 'MAX(val) and MAX(num)');
+
+$q->fields({num => '', max_val => {MAX => ['val']}, max_id => {MAX => ['id']}});
+$q->group_by('num');
+
+cmp_deeply(
+    $q->get_all(),
+    [{num => 1, max_val => 6, max_id => 2}, {num => 2, max_id => 3, max_val => undef}],
+    'MAX(val) and MAX(id) and group by num'
+);
+
+$q->fields({min => {MIN => ['val']}});
+$q->group_by();
+
+cmp_deeply($q->get_all(), [{min => 5}], 'MIN(val)');
+
+$q->fields({min_val => {MIN => ['val']}, min_num => {MIN => ['num']}});
+
+cmp_deeply($q->get_all(), [{min_val => 5, min_num => 1}], 'MIN(val) and MIN(num)');
+
+$q->fields({num => '', min_val => {MIN => ['val']}, min_id => {MIN => ['id']}});
+$q->group_by('num');
+
+cmp_deeply(
+    $q->get_all(),
+    [{num => 1, min_val => 5, min_id => 1}, {num => 2, min_id => 3, min_val => undef}],
+    'MIN(val) and MIN(id) and group by num'
+);
+
 done_testing();

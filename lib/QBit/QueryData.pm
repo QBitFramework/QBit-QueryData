@@ -154,6 +154,132 @@ my $FUNCTIONS = {
             },
         };
     },
+    MAX => sub {
+        my ($qd, $fields, $field) = @_;
+
+        my $args = $fields->{$field}{'MAX'};
+
+        throw gettext('Function "MAX" can not take more than one arguments') if @$args > 1;
+
+        #TODO: проверить что поля в $args существуют
+
+        my $type = $qd->definition->{$args->[0]}{'type'} // 'string';
+
+        my $AGGREGATOR = {};
+        my $MAX = undef;
+
+        return {
+            init => sub {
+                $AGGREGATOR = {};
+                $MAX        = undef;
+            },
+            process => sub {
+                my ($qd, $fields, $row) = @_;
+
+                my $val = $qd->_get_field_value_by_path($fields, $row, undef, undef, @{$qd->_get_path($args->[0])});
+
+                if (!defined($val)) {
+                    # it's ok
+                } elsif (!defined($MAX)) {
+                    $MAX = $val;
+                } elsif ($type eq 'string') {
+                    if ($val gt $MAX) {
+                        $MAX = $val;
+                    }
+                } else {
+                    if ($val > $MAX) {
+                        $MAX = $val;
+                    }
+                }
+
+                return $MAX;
+            },
+            aggregation => sub {
+                my ($qd, $fields, $row, $key) = @_;
+
+                if (!defined($MAX)) {
+                    # it's ok
+                } elsif (!defined($AGGREGATOR->{$key})) {
+                    $AGGREGATOR->{$key} = $MAX;
+                } elsif ($type eq 'string') {
+                    if ($MAX gt $AGGREGATOR->{$key}) {
+                        $AGGREGATOR->{$key} = $MAX;
+                    }
+                } else {
+                    if ($MAX > $AGGREGATOR->{$key}) {
+                        $AGGREGATOR->{$key} = $MAX;
+                    }
+                }
+
+                $MAX = undef;
+
+                return $AGGREGATOR->{$key};
+            },
+        };
+    },
+    MIN => sub {
+        my ($qd, $fields, $field) = @_;
+
+        my $args = $fields->{$field}{'MIN'};
+
+        throw gettext('Function "MIN" can not take more than one arguments') if @$args > 1;
+
+        #TODO: проверить что поля в $args существуют
+
+        my $type = $qd->definition->{$args->[0]}{'type'} // 'string';
+
+        my $AGGREGATOR = {};
+        my $MIN = undef;
+
+        return {
+            init => sub {
+                $AGGREGATOR = {};
+                $MIN        = undef;
+            },
+            process => sub {
+                my ($qd, $fields, $row) = @_;
+
+                my $val = $qd->_get_field_value_by_path($fields, $row, undef, undef, @{$qd->_get_path($args->[0])});
+
+                if (!defined($val)) {
+                    # it's ok
+                } elsif (!defined($MIN)) {
+                    $MIN = $val;
+                } elsif ($type eq 'string') {
+                    if ($val lt $MIN) {
+                        $MIN = $val;
+                    }
+                } else {
+                    if ($val < $MIN) {
+                        $MIN = $val;
+                    }
+                }
+
+                return $MIN;
+            },
+            aggregation => sub {
+                my ($qd, $fields, $row, $key) = @_;
+
+                if (!defined($MIN)) {
+                    # it's ok
+                } elsif (!defined($AGGREGATOR->{$key})) {
+                    $AGGREGATOR->{$key} = $MIN;
+                } elsif ($type eq 'string') {
+                    if ($MIN lt $AGGREGATOR->{$key}) {
+                        $AGGREGATOR->{$key} = $MIN;
+                    }
+                } else {
+                    if ($MIN < $AGGREGATOR->{$key}) {
+                        $AGGREGATOR->{$key} = $MIN;
+                    }
+                }
+
+                $MIN = undef;
+
+                return $AGGREGATOR->{$key};
+            },
+        };
+    },
 };
 
 sub init {
