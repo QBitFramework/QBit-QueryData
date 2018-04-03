@@ -79,10 +79,7 @@ sub data {
 sub fields {
     my ($self, $fields) = @_;
 
-    foreach (keys(%{$self->{'__FIELDS__'}})) {
-        $self->{'__PROCESS_FIELDS__'}{$_}->post_process()
-          if exists($self->{'__PROCESS_FIELDS__'}{$_}) && $self->{'__PROCESS_FIELDS__'}{$_}->can('post_process');
-    }
+    $self->{'__DISTINCT_FIELDS__'} = [];
 
     if (defined($fields)) {
         $fields = {map {$_ => ''} @$fields} if ref($fields) eq 'ARRAY';
@@ -243,6 +240,12 @@ sub get_all {
     my @fields      = keys(%$fields);
     my @aggregators = ();
 
+    my @distinct_fields = @{$self->{'__DISTINCT_FIELDS__'}};
+    if (@distinct_fields || $self->{'__DISTINCT__'}) {
+        @distinct_fields = @fields;
+    }
+
+    #TODO: move it into fields
     foreach (@fields) {
         if ($self->{'__PROCESS_FIELDS__'}{$_}) {
             if ($self->{'__PROCESS_FIELDS__'}{$_}->can('init_storage')) {
@@ -252,17 +255,17 @@ sub get_all {
             if ($self->{'__PROCESS_FIELDS__'}{$_}->can('aggregation')) {
                 push(@aggregators, $_);
             }
+
+            #TODO: подумать над реализацией двух функций над одним полем
+            #проверить что две группирующие функции не используются над одни полем
         }
     }
 
     my @group_by = @{$self->{'__GROUP_BY__'} // []};
 
-    if (!@group_by && $self->{'__DISTINCT__'}) {
-        @group_by = map {$self->_get_path($_)} @fields;
-    }
-
-    my %uniq = ();
-    my @data = ();
+    my %uniq     = ();
+    my %distinct = ();
+    my @data     = ();
     foreach my $row (@{$self->{'data'}}) {
         next if defined($self->{'__FILTER__'}) && !$self->{'__FILTER__'}->($row);
 
@@ -283,18 +286,49 @@ sub get_all {
                 push(@data, $new_row);
 
                 $uniq{$key} = $#data;
+
+                if (@distinct_fields) {
+                    my $distinct_key = join($;, map {$new_row->{$_} // 'UNDEF'} @distinct_fields);
+
+                    unless (exists($distinct{$distinct_key})) {
+                        $distinct{$distinct_key} = $#data;
+                    }
+                }
             }
         } elsif (@aggregators) {
             # нет группировок но есть агригирующие функции
             unless (@data) {
                 # результат одна строка
                 push(@data, $new_row);
+
+                if (@distinct_fields) {
+                    my $distinct_key = join($;, map {$new_row->{$_} // 'UNDEF'} @distinct_fields);
+
+                    unless (exists($distinct{$distinct_key})) {
+                        $distinct{$distinct_key} = $#data;
+                    }
+                }
             }
 
             $data[0]->{$_} = $self->{'__PROCESS_FIELDS__'}{$_}->aggregation($row, $_) foreach @aggregators;
         } else {
             push(@data, $new_row);
+
+            if (@distinct_fields) {
+                my $distinct_key = join($;, map {$new_row->{$_} // 'UNDEF'} @distinct_fields);
+
+                unless (exists($distinct{$distinct_key})) {
+                    $distinct{$distinct_key} = $#data;
+                }
+            }
         }
+    }
+
+    if (@distinct_fields && keys(%distinct) != @data) {
+        my %reverse_distinct = reverse %distinct;
+
+        my $index = 0;
+        @data = grep {exists($reverse_distinct{$index++})} @data;
     }
 
     if (defined($self->{'__ORDER_BY__'})) {

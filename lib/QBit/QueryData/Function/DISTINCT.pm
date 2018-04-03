@@ -11,9 +11,12 @@ sub init {
 
     $self->{'FIELD'} = $self->args->[0];
 
-    unless (@{$self->qd->{'__GROUP_BY__'} // []}) {
-        $self->qd->group_by(keys(%{$self->fields}));
-    }
+    my $distinct_fields = $self->qd->{'__DISTINCT_FIELDS__'};
+
+    #TODO: set_error
+    throw gettex('You can use in request not more than one function "DISTINCT"') if @$distinct_fields > 1;
+
+    push(@$distinct_fields, $self->field);
 }
 
 sub process {
@@ -21,7 +24,5 @@ sub process {
 
     return $self->qd->_get_field_value_by_path($row, $row, undef, @{$self->qd->_get_path($self->{'FIELD'})});
 }
-
-sub post_process {$_[0]->qd->group_by()}
 
 TRUE;
