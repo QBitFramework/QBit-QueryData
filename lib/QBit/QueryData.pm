@@ -270,16 +270,15 @@ sub get_all {
             my $key =
               join($;, map {$self->get_field_value_by_path($row, $new_row, undef, @$_) // '__UNDEF__'} @group_by);
 
-            if (exists($uniq{$key})) {
-                # ключ совпадает, только агрегируем
-                $data[$uniq{$key}]->{$_} = $self->{'__PROCESS_FIELDS__'}{$_}->aggregation($row, $key)
-                  foreach @aggregators;
-            } else {
+            unless (exists($uniq{$key})) {
                 # строка с новым ключом
                 push(@data, $new_row);
 
                 $uniq{$key} = $#data;
             }
+
+            # агрегируем
+            $data[$uniq{$key}]->{$_} = $self->{'__PROCESS_FIELDS__'}{$_}->aggregation($row, $key) foreach @aggregators;
         } elsif (@aggregators) {
             # нет группировок но есть агригирующие функции
             unless (@data) {
