@@ -250,7 +250,7 @@ sub get_all {
             }
 
             #TODO: подумать над реализацией двух функций над одним полем
-            #проверить что две группирующие функции не используются над одни полем
+            #проверить что две группирующие функции не используются над одним полем
         }
     }
 
@@ -549,8 +549,7 @@ sub _get_field_code_by_path {
 
 sub get_field_value_by_path {
     my ($self, $row, $new_row, $last_field, @paths) = @_;
-    #Последний параметр передается как массив для копирования,
-    #возможно стоит заменить на ссылку на массив и делать копирование перед вызовом
+    #last argument is a array, for shallow copy
 
     unless (@paths) {
         return $last_field eq 'new_row' ? $new_row : $row;
@@ -560,13 +559,15 @@ sub get_field_value_by_path {
     my $fields = $self->get_fields() // {};
 
     if ($path->{'type'} eq 'array') {
-        if ($fields->{$path->{'key'}}) {
+        if ((defined($last_field) && $last_field eq 'new_row') || (!defined($last_field) && $fields->{$path->{'key'}}))
+        {
             return $self->get_field_value_by_path($row, $new_row->[$path->{'key'}], 'new_row', @paths);
         } else {
             return $self->get_field_value_by_path($row->[$path->{'key'}], $new_row, 'row', @paths);
         }
     } else {
-        if ($fields->{$path->{'key'}}) {
+        if ((defined($last_field) && $last_field eq 'new_row') || (!defined($last_field) && $fields->{$path->{'key'}}))
+        {
             return $self->get_field_value_by_path($row, $new_row->{$path->{'key'}}, 'new_row', @paths);
         } else {
             return $self->get_field_value_by_path($row->{$path->{'key'}}, $new_row, 'row', @paths);
@@ -719,7 +720,9 @@ B<Example:>
     $q->fields([qw(caption)]);
     $q->fields({
         caption => '',
-        key => 'id', # create alias 'key' for field 'id'
+        key     => 'id',                 # create alias 'key' for field 'id'
+        k1      => 'data.k1',            # alias on complex field
+        sum_k1  => {SUM => ['data.k1']}, # Function SUM
     });
 
     # use default fields
@@ -728,6 +731,46 @@ B<Example:>
 
     # all fields
     $q->fields();
+
+B<Functions:>
+
+All functions like in MySQL (except FIELD)
+
+=over
+
+=item *
+
+B<FIELD> - This is not a function, but it also inherits from Function.
+
+=item *
+
+B<CONCAT>
+
+=item *
+
+B<COUNT>
+
+=item *
+
+B<MAX>
+
+=item *
+
+B<MIN>
+
+=item *
+
+B<SUM>
+
+=item *
+
+B<DISTINCT>
+
+=back
+
+Namespace for functions:
+
+  QBit::QueryData::Function::YOUFUNC # you can create self functions (name in uppercase)
 
 =item *
 

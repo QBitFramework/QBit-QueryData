@@ -36,10 +36,10 @@ sub check_args {
     my ($self) = @_;
 
     my $key;
-    if ($self->args->[0] ne '') {
-        $key = $self->args->[0];
-    } else {
+    if ($self->args->[0] eq '') {
         $key = $self->path->[0]{'key'};
+    } else {
+        $key = $self->qd->_get_path($self->args->[0])->[0]{'key'};
     }
 
     unless (exists($self->qd->{'__ALL_FIELDS__'}{$key})) {
