@@ -1,3 +1,9 @@
+libqbit-querydata-perl (0.010) raring; urgency=low
+
+  * fix aggregation
+
+ -- Igor Sverdlov <igor-sverdlov@mail.ru>  Fri, 06 Apr 2018 00:17:48 +0300
+
 libqbit-querydata-perl (0.009) raring; urgency=low
 
   * added documentation, fix FIELD
