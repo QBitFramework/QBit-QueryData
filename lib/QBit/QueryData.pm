@@ -77,52 +77,51 @@ sub data {
 }
 
 sub fields {
-    my ($self, $fields) = @_;
+    my ($self, $set_fields) = @_;
 
-    $self->{'__DISTINCT_FIELDS__'} = [];
+    if (defined($set_fields)) {
+        $set_fields = {map {$_ => ''} @$set_fields} if ref($set_fields) eq 'ARRAY';
 
-    if (defined($fields)) {
-        $fields = {map {$_ => ''} @$fields} if ref($fields) eq 'ARRAY';
-
-        unless (%$fields) {
+        unless (%$set_fields) {
             #default
             delete($self->{'__FIELDS__'});
         } else {
             #set fields
-            $self->{'__FIELDS__'} = $fields;
-
-            #check
-            if (exists($self->{'__ALL_FIELDS__'})) {
-                foreach my $field (keys(%$fields)) {
-                    my $path = $self->_get_path($field);
-
-                    my $func_name;
-                    if (@$path > 1 || ref($fields->{$field}) eq '') {
-                        $func_name = 'FIELD';
-                    } elsif (ref($fields->{$field}) eq 'HASH') {
-                        $func_name = [%{$fields->{$field}}]->[0];
-                    } else {
-                        throw 'Unknown field';
-                    }
-
-                    my $class = $self->_get_process_class($func_name);
-
-                    #TODO: qd не сохранять?
-                    $self->{'__PROCESS_FIELDS__'}{$field} =
-                      $class->new(name => $func_name, qd => $self, path => $path, fields => $fields, field => $field);
-                }
-
-                my $error_message =
-                  join("\n",
-                    map {$_->get_error_message} grep {$_->has_errors} values(%{$self->{'__PROCESS_FIELDS__'}}));
-
-                throw Exception $error_message if $error_message;
-            }
+            $self->{'__FIELDS__'} = $set_fields;
         }
     } else {
         #all fields
         delete($self->{'__FIELDS__'});
         delete($self->{'fields'});
+    }
+
+    if (exists($self->{'__ALL_FIELDS__'})) {
+        delete($self->{'__PROCESS_FIELDS__'});
+
+        my $fields = $self->get_fields();
+
+        foreach my $field (keys(%$fields)) {
+            my $path = $self->_get_path($field);
+
+            my $func_name;
+            if (@$path > 1 || ref($fields->{$field}) eq '') {
+                $func_name = 'FIELD';
+            } elsif (ref($fields->{$field}) eq 'HASH') {
+                $func_name = [%{$fields->{$field}}]->[0];
+            } else {
+                throw 'Unknown field';
+            }
+
+            my $class = $self->_get_process_class($func_name);
+
+            $self->{'__PROCESS_FIELDS__'}{$field} =
+              $class->new(name => $func_name, qd => $self, path => $path, fields => $fields, field => $field);
+        }
+
+        my $error_message =
+          join("\n", map {$_->get_error_message} grep {$_->has_errors} values(%{$self->{'__PROCESS_FIELDS__'}}));
+
+        throw Exception $error_message if $error_message;
     }
 
     return $self;
@@ -240,12 +239,6 @@ sub get_all {
     my @fields      = keys(%$fields);
     my @aggregators = ();
 
-    my @distinct_fields = @{$self->{'__DISTINCT_FIELDS__'}};
-    if (@distinct_fields || $self->{'__DISTINCT__'}) {
-        @distinct_fields = @fields;
-    }
-
-    #TODO: move it into fields
     foreach (@fields) {
         if ($self->{'__PROCESS_FIELDS__'}{$_}) {
             if ($self->{'__PROCESS_FIELDS__'}{$_}->can('init_storage')) {
@@ -261,11 +254,10 @@ sub get_all {
         }
     }
 
-    my @group_by = @{$self->{'__GROUP_BY__'} // []};
+    my @group_by = @{$self->{'__PATHS_GROUP_BY__'} // []};
 
-    my %uniq     = ();
-    my %distinct = ();
-    my @data     = ();
+    my %uniq = ();
+    my @data = ();
     foreach my $row (@{$self->{'data'}}) {
         next if defined($self->{'__FILTER__'}) && !$self->{'__FILTER__'}->($row);
 
@@ -275,7 +267,8 @@ sub get_all {
         }
 
         if (@group_by) {
-            my $key = join($;, map {$self->_get_field_value_by_path($row, $new_row, undef, @$_) // 'UNDEF'} @group_by);
+            my $key =
+              join($;, map {$self->get_field_value_by_path($row, $new_row, undef, @$_) // '__UNDEF__'} @group_by);
 
             if (exists($uniq{$key})) {
                 # ключ совпадает, только агрегируем
@@ -286,49 +279,36 @@ sub get_all {
                 push(@data, $new_row);
 
                 $uniq{$key} = $#data;
-
-                if (@distinct_fields) {
-                    my $distinct_key = join($;, map {$new_row->{$_} // 'UNDEF'} @distinct_fields);
-
-                    unless (exists($distinct{$distinct_key})) {
-                        $distinct{$distinct_key} = $#data;
-                    }
-                }
             }
         } elsif (@aggregators) {
             # нет группировок но есть агригирующие функции
             unless (@data) {
                 # результат одна строка
                 push(@data, $new_row);
-
-                if (@distinct_fields) {
-                    my $distinct_key = join($;, map {$new_row->{$_} // 'UNDEF'} @distinct_fields);
-
-                    unless (exists($distinct{$distinct_key})) {
-                        $distinct{$distinct_key} = $#data;
-                    }
-                }
             }
 
             $data[0]->{$_} = $self->{'__PROCESS_FIELDS__'}{$_}->aggregation($row, $_) foreach @aggregators;
         } else {
             push(@data, $new_row);
-
-            if (@distinct_fields) {
-                my $distinct_key = join($;, map {$new_row->{$_} // 'UNDEF'} @distinct_fields);
-
-                unless (exists($distinct{$distinct_key})) {
-                    $distinct{$distinct_key} = $#data;
-                }
-            }
         }
     }
 
-    if (@distinct_fields && keys(%distinct) != @data) {
-        my %reverse_distinct = reverse %distinct;
+    if ($self->_has_distinct && (!@group_by || !$self->_grouping_has_resulting_fields())) {
+        %uniq = ();
 
-        my $index = 0;
-        @data = grep {exists($reverse_distinct{$index++})} @data;
+        #TODO: inplace algorithm?
+        my @tmp_data = ();
+        foreach my $row (@data) {
+            my $key = join($;, map {$row->{$_} // '__UNDEF__'} @fields);
+
+            unless ($uniq{$key}) {
+                $uniq{$key} = TRUE;
+
+                push(@tmp_data, $row);
+            }
+        }
+
+        @data = @tmp_data;
     }
 
     if (defined($self->{'__ORDER_BY__'})) {
@@ -350,11 +330,32 @@ sub get_all {
     return \@data;
 }
 
+sub _has_distinct {
+    my ($self) = @_;
+
+    return $self->{'__DISTINCT__'}
+      || grep {ref($self->{'__PROCESS_FIELDS__'}{$_}) =~ /::DISTINCT\z/} keys(%{$self->{'__PROCESS_FIELDS__'}});
+}
+
+sub _grouping_has_resulting_fields {
+    my ($self) = @_;
+
+    my %group_by = map {$_ => TRUE} @{$self->{'__GROUP_BY__'} // []};
+
+    foreach my $field (keys(%{$self->{'__PROCESS_FIELDS__'}})) {
+        my $main_field = $self->{'__PROCESS_FIELDS__'}{$field}->get_main_field();
+        return TRUE if $group_by{$main_field};
+    }
+
+    return FALSE;
+}
+
 sub group_by {
     my ($self, @group_by) = @_;
 
     unless (@group_by) {
         delete($self->{'__GROUP_BY__'});
+        delete($self->{'__PATHS_GROUP_BY__'});
 
         return $self;
     }
@@ -381,7 +382,8 @@ sub group_by {
         join(', ', @not_grouping_fields))
       if @not_grouping_fields;
 
-    $self->{'__GROUP_BY__'} = \@paths;
+    $self->{'__GROUP_BY__'}       = \@group_by;
+    $self->{'__PATHS_GROUP_BY__'} = \@paths;
 
     return $self;
 }
@@ -545,8 +547,10 @@ sub _get_field_code_by_path {
     return $value;
 }
 
-sub _get_field_value_by_path {
+sub get_field_value_by_path {
     my ($self, $row, $new_row, $last_field, @paths) = @_;
+    #Последний параметр передается как массив для копирования,
+    #возможно стоит заменить на ссылку на массив и делать копирование перед вызовом
 
     unless (@paths) {
         return $last_field eq 'new_row' ? $new_row : $row;
@@ -557,15 +561,15 @@ sub _get_field_value_by_path {
 
     if ($path->{'type'} eq 'array') {
         if ($fields->{$path->{'key'}}) {
-            return $self->_get_field_value_by_path($row, $new_row->[$path->{'key'}], 'new_row', @paths);
+            return $self->get_field_value_by_path($row, $new_row->[$path->{'key'}], 'new_row', @paths);
         } else {
-            return $self->_get_field_value_by_path($row->[$path->{'key'}], $new_row, 'row', @paths);
+            return $self->get_field_value_by_path($row->[$path->{'key'}], $new_row, 'row', @paths);
         }
     } else {
         if ($fields->{$path->{'key'}}) {
-            return $self->_get_field_value_by_path($row, $new_row->{$path->{'key'}}, 'new_row', @paths);
+            return $self->get_field_value_by_path($row, $new_row->{$path->{'key'}}, 'new_row', @paths);
         } else {
-            return $self->_get_field_value_by_path($row->{$path->{'key'}}, $new_row, 'row', @paths);
+            return $self->get_field_value_by_path($row->{$path->{'key'}}, $new_row, 'row', @paths);
         }
     }
 }

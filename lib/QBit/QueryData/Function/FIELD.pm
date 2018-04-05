@@ -9,13 +9,19 @@ sub init {
 
     $self->SUPER::init();
 
-    $self->{'PATH'} = $self->args->[0] eq '' ? $self->path : $self->qd->_get_path($self->args->[0]);
+    if ($self->args->[0] eq '') {
+        $self->{'PATH'}           = $self->path;
+        $self->{'__MAIN_FIELD__'} = $self->field;
+    } else {
+        $self->{'PATH'}           = $self->qd->_get_path($self->args->[0]);
+        $self->{'__MAIN_FIELD__'} = $self->args->[0];
+    }
 }
 
 sub process {
     my ($self, $row) = @_;
 
-    return $self->qd->_get_field_value_by_path($row, $row, undef, @{$self->{'PATH'}});
+    return $self->qd->get_field_value_by_path($row, $row, undef, @{$self->{'PATH'}});
 }
 
 sub check {TRUE}

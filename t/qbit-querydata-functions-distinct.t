@@ -63,4 +63,12 @@ cmp_deeply(
     'distinct as function with other fields'
 );
 
+$q->fields({label => {DISTINCT => ['label']}, sum_num => {SUM => ['num']}});
+
+cmp_deeply(
+    $q->get_all(),
+    [{label => 'label 1', sum_num => 15}],
+    'distinct without groupping but has aggregation function'
+);
+
 done_testing();

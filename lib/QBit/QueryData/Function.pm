@@ -13,6 +13,8 @@ sub init {
 
     weaken($self->{'qd'});
 
+    $self->{'__MAIN_FIELD__'} = '';
+
     if ($self->check()) {
         $self->set_args();
 
@@ -55,5 +57,7 @@ sub check_args {
 
     return TRUE;
 }
+
+sub get_main_field {$_[0]->{'__MAIN_FIELD__'}}
 
 TRUE;

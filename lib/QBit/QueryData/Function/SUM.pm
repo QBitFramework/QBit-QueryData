@@ -21,7 +21,7 @@ sub init_storage {
 sub process {
     my ($self, $row) = @_;
 
-    my $val = $self->qd->_get_field_value_by_path($row, $row, undef, @{$self->qd->_get_path($self->args->[0])});
+    my $val = $self->qd->get_field_value_by_path($row, $row, undef, @{$self->qd->_get_path($self->args->[0])});
 
     return $self->{'SUM'} += $val // 0;
 }

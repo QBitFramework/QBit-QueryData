@@ -27,7 +27,7 @@ sub process {
     if ($self->{'AGGR_FIELD'} eq '*') {
         $self->{'COUNT'}++;
     } else {
-        my $val = $self->qd->_get_field_value_by_path($row, $row, undef, @{$self->qd->_get_path($self->{'AGGR_FIELD'})});
+        my $val = $self->qd->get_field_value_by_path($row, $row, undef, @{$self->qd->_get_path($self->{'AGGR_FIELD'})});
 
         $self->{'COUNT'}++ if defined($val);
     }

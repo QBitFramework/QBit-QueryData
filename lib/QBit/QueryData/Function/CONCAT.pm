@@ -14,7 +14,7 @@ sub process {
         map {
             ref($_) eq 'SCALAR'
               ? $$_
-              : $self->qd->_get_field_value_by_path($row, $row, undef, @{$self->qd->_get_path($_)})
+              : $self->qd->get_field_value_by_path($row, $row, undef, @{$self->qd->_get_path($_)})
               // ''
           } @{$self->args}
     );
