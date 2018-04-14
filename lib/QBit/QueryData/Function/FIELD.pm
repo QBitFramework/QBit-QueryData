@@ -9,6 +9,8 @@ sub init {
 
     $self->SUPER::init();
 
+    return FALSE if $self->has_errors();
+
     if ($self->args->[0] eq '') {
         $self->{'PATH'}           = $self->path;
         $self->{'__MAIN_FIELD__'} = $self->field;
@@ -19,9 +21,13 @@ sub init {
 }
 
 sub process {
-    my ($self, $row) = @_;
+    my ($self) = @_;
 
-    return $self->qd->get_field_value_by_path($row, $row, undef, @{$self->{'PATH'}});
+    return
+        '        $new_row->{'
+      . $self->qd->quote($self->field) . '} = '
+      . $self->qd->_get_field_code_by_path('$row', $self->{'PATH'}) . ';
+';
 }
 
 sub check {TRUE}
