@@ -151,14 +151,21 @@ sub get_fields {
     return $self->{'__FIELDS__'} // $self->{'fields'} // $self->{'__ALL_FIELDS__'};
 }
 
+my $VAR_COUNT = 1;
+
 sub filter {
     my ($self, $filter) = @_;
 
     if (defined($filter)) {
         my $filter_code = '';
-        $self->_filter(\$filter_code, $filter);
 
-        $self->{'__FILTER__'} = $filter_code;
+        $VAR_COUNT = 1;
+        my $filter_variables_code = '';
+
+        $self->_filter(\$filter_code, \$filter_variables_code, $filter);
+
+        $self->{'__FILTER__'}           = $filter_code;
+        $self->{'__FILTER_VARIABLES__'} = $filter_variables_code;
     } else {
         delete($self->{'__FILTER__'});
     }
@@ -271,13 +278,7 @@ sub get_all {
 sub _get_process_sub {
     my ($self) = @_;
 
-    my $code = '';
-
-    if ($self->{'__FILTER_VARIABLES__'}) {
-        $code .= $self->{'__FILTER_VARIABLES__'};
-    }
-
-    $code .= '
+    my $code = '
 sub {
     # PARAMS
     # $_[0] - $self (QD)
@@ -285,6 +286,10 @@ sub {
 
     no warnings;
 ';
+
+    if ($self->{'__FILTER_VARIABLES__'}) {
+        $code .= $self->{'__FILTER_VARIABLES__'};
+    }
 
     my @group_by = @{$self->{'__PATHS_GROUP_BY__'} // []};
 
@@ -484,17 +489,17 @@ sub _get_sub {
 }
 
 sub _filter {
-    my ($self, $body, $filter) = @_;
+    my ($self, $code, $variables, $filter) = @_;
 
     my $operation = ' && ';
 
-    $$body .= '(';
+    $$code .= '(';
 
     my @part = ();
     if (ref($filter) eq 'HASH') {
         if ([%$filter]->[0] eq 'NOT' && ref($filter->{'NOT'}) eq 'ARRAY') {
             my $sub_body .= 'not (';
-            $self->_filter(\$sub_body, $filter->{'NOT'}[0]);
+            $self->_filter(\$sub_body, $variables, $filter->{'NOT'}[0]);
             $sub_body .= ')';
 
             push(@part, $sub_body);
@@ -510,10 +515,18 @@ sub _filter {
                 my $field_code = $self->_get_field_code_by_path('$row', $path);
 
                 if (ref($filter->{$field}) eq 'ARRAY') {
-                    push(@part,
-                            "(grep {$field_code $type_operation \$_} ("
-                          . join(', ', map {$self->_get_value($field, $_)} @{$filter->{$field}})
-                          . "))");
+                    my $var_name = 'hash_' . $VAR_COUNT++;
+
+                    $$variables .= '
+    my %' . $var_name . ' = (
+'
+                      . join(",\n",
+                        map {'        ' . (defined($_) ? $self->_get_value($field, $_) : "'__UNDEF__'") . ' => TRUE'}
+                          @{$filter->{$field}})
+                      . '
+    );
+';
+                    push(@part, '$' . $var_name . '{' . $field_code . ' // "__UNDEF__"}');
                 } else {
                     my $value = $self->_get_value($field, $filter->{$field});
 
@@ -526,7 +539,7 @@ sub _filter {
 
         foreach my $sub_filter (@{$filter->[1]}) {
             my $sub_body = '';
-            $self->_filter(\$sub_body, $sub_filter);
+            $self->_filter(\$sub_body, $variables, $sub_filter);
             push(@part, $sub_body);
         }
     } elsif (ref($filter) eq 'ARRAY' && @$filter == 3) {
@@ -548,12 +561,21 @@ sub _filter {
             throw gettext('Operation "%s" is not applied to the array', $op)
               if grep {$op eq $_} ('>', '>=', '<', '<=', 'LIKE', 'NOT LIKE', 'IS', 'IS NOT');
 
+            my $var_name = 'hash_' . $VAR_COUNT++;
+
+            $$variables .= '
+    my %' . $var_name . ' = (
+'
+              . join(",\n",
+                map {'        ' . (defined($_) ? $self->_get_value($field, $_) : "'__UNDEF__'") . ' => TRUE'} @$value)
+              . '
+    );
+';
             push(@part,
-                    "("
-                  . ($op eq '<>' || $op eq '!=' || $op eq 'NOT IN' ? '!' : '')
-                  . "grep {$field_code $type_operation \$_} ("
-                  . join(', ', map {$self->_get_value($field, $_)} @$value)
-                  . "))");
+                    ($op eq '<>' || $op eq '!=' || $op eq 'NOT IN' ? '!' : '') . '$'
+                  . $var_name . '{'
+                  . $field_code
+                  . ' // "__UNDEF__"}');
         } else {
             throw gettext('Operation "%s" is only applied to the undef', $op)
               if (grep {$op eq $_} ('IS', 'IS NOT')) && defined($value);
@@ -566,9 +588,9 @@ sub _filter {
         }
     }
 
-    $$body .= join($operation, @part);
+    $$code .= join($operation, @part);
 
-    $$body .= ')';
+    $$code .= ')';
 }
 
 sub _get_order {
